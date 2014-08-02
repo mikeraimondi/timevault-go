@@ -1,10 +1,10 @@
 package timevault
 
 import (
-	"net/http"
-	"time"
 	"encoding/json"
+	"net/http"
 	"strconv"
+	"time"
 
 	"appengine"
 	"appengine/datastore"
@@ -22,13 +22,21 @@ type TimevaultUser struct {
 }
 
 type Pomodoro struct {
-	User string
+	User     string
 	Duration int64
-	Created time.Time
+	Created  time.Time
 }
+
 
 func (u *TimevaultUser) String() string {
 	return u.Username
+}
+
+func (u *TimevaultUser) Error() string {
+	if u.ID == "" {
+		return "Not Logged In"
+	}
+	return ""
 }
 
 func init() {
@@ -36,16 +44,14 @@ func init() {
 	http.HandleFunc("/pomodoros", index)
 }
 
-func root(w http.ResponseWriter, r *http.Request) {
+func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error) {
 	c := appengine.NewContext(r)
 	if u := user.Current(c); u != nil {
 		q := datastore.NewQuery("TimevaultUser").Filter("ID =", u.ID).Limit(1)
 		users := make([]TimevaultUser, 0, 1)
 		if _, err := q.GetAll(c, &users); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, err
 		}
-		curUser := &TimevaultUser{}
 		if len(users) == 0 {
 			newUser := &TimevaultUser{
 				ID:          u.ID,
@@ -56,52 +62,45 @@ func root(w http.ResponseWriter, r *http.Request) {
 			}
 			key := datastore.NewIncompleteKey(c, "TimevaultUser", nil)
 			if _, err := datastore.Put(c, key, newUser); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+				return nil, err
 			}
-			curUser = newUser
+			return newUser, nil
 		} else {
-			curUser = &users[0]
+			return &users[0], nil
 		}
-		us, err := json.Marshal(curUser)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, string(us))
 	} else {
 		url, _ := user.LoginURL(c, "/")
 		fmt.Fprintf(w, `<a href="%s">Sign in or register</a>`, url)
+		return &TimevaultUser{}, nil
+	}
+}
+
+func root(w http.ResponseWriter, r *http.Request) {
+	if curUser, err := authenticate(w, r); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else {
+		if curUser.Error() == "Not Logged In" {
+			return
+		}
+		if us, err := json.Marshal(curUser); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, string(us))
+			return
+		}
 	}
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
-	c := appengine.NewContext(r)
-	if u := user.Current(c); u != nil {
-		q := datastore.NewQuery("TimevaultUser").Filter("ID =", u.ID).Limit(1)
-		users := make([]TimevaultUser, 0, 1)
-		if _, err := q.GetAll(c, &users); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+	if curUser, err := authenticate(w, r); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else {
+		if curUser.Error() == "Not Logged In" {
 			return
-		}
-		curUser := &TimevaultUser{}
-		if len(users) == 0 {
-			newUser := &TimevaultUser{
-				ID:          u.ID,
-				Email:       u.Email,
-				Username:    u.String(),
-				PhoneNumber: "555-5555",
-				Created:     time.Now(),
-			}
-			key := datastore.NewIncompleteKey(c, "TimevaultUser", nil)
-			if _, err := datastore.Put(c, key, newUser); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			curUser = newUser
-		} else {
-			curUser = &users[0]
 		}
 		if r.Method != "POST" {
 			// index
@@ -118,10 +117,11 @@ func index(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		newPomodoro := &Pomodoro{
-			User: curUser.ID,
+			User:     curUser.ID,
 			Duration: duration,
-			Created: time.Now(),
+			Created:  time.Now(),
 		}
+		c := appengine.NewContext(r)
 		key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
 		if _, err := datastore.Put(c, key, newPomodoro); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -134,8 +134,5 @@ func index(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, string(pom))
-	} else {
-		url, _ := user.LoginURL(c, "/")
-		fmt.Fprintf(w, `<a href="%s">Sign in or register</a>`, url)
 	}
 }
