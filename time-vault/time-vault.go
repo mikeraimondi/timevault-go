@@ -70,7 +70,7 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 		}
 	} else {
 		url, _ := user.LoginURL(c, "/")
-		fmt.Fprintf(w, `<a href="%s">Sign in or register</a>`, url)
+		http.Redirect(w, r, url, 302)
 		return &TimevaultUser{}, nil
 	}
 }
