@@ -27,7 +27,6 @@ type Pomodoro struct {
 	Created  time.Time
 }
 
-
 func (u *TimevaultUser) String() string {
 	return u.Username
 }
@@ -40,8 +39,22 @@ func (u *TimevaultUser) Error() string {
 }
 
 func init() {
-	http.HandleFunc("/", root)
-	http.HandleFunc("/pomodoros", index)
+	http.HandleFunc("/", withAuth(root))
+	http.HandleFunc("/pomodoros", withAuth(index))
+}
+
+func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if curUser, err := authenticate(w, r); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			if curUser.Error() == "Not Logged In" {
+				return
+			}
+			handler(w, r, curUser)
+		}
+	}
 }
 
 func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error) {
@@ -75,64 +88,48 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 	}
 }
 
-func root(w http.ResponseWriter, r *http.Request) {
-	if curUser, err := authenticate(w, r); err != nil {
+func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
+	if us, err := json.Marshal(curUser); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	} else {
-		if curUser.Error() == "Not Logged In" {
-			return
-		}
-		if us, err := json.Marshal(curUser); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, string(us))
-			return
-		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, string(us))
+		return
 	}
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	if curUser, err := authenticate(w, r); err != nil {
+func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
+	if r.Method != "POST" {
+		// index
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	} else {
-		if curUser.Error() == "Not Logged In" {
-			return
-		}
-		if r.Method != "POST" {
-			// index
-			return
-		}
-		err := r.ParseForm()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		duration, err := strconv.ParseInt(r.Form["duration"][0], 10, 0)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		newPomodoro := &Pomodoro{
-			User:     curUser.ID,
-			Duration: duration,
-			Created:  time.Now(),
-		}
-		c := appengine.NewContext(r)
-		key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
-		if _, err := datastore.Put(c, key, newPomodoro); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pom, err := json.Marshal(newPomodoro)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, string(pom))
 	}
+	duration, err := strconv.ParseInt(r.Form["duration"][0], 10, 0)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	newPomodoro := &Pomodoro{
+		User:     curUser.ID,
+		Duration: duration,
+		Created:  time.Now(),
+	}
+	c := appengine.NewContext(r)
+	key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
+	if _, err := datastore.Put(c, key, newPomodoro); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	pom, err := json.Marshal(newPomodoro)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, string(pom))
 }
