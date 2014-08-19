@@ -61,7 +61,7 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 	c := appengine.NewContext(r)
 	if u := user.Current(c); u != nil {
 		q := datastore.NewQuery("TimevaultUser").Filter("ID =", u.ID).Limit(1)
-		users := make([]TimevaultUser, 0, 1)
+		var users []TimevaultUser
 		if _, err := q.GetAll(c, &users); err != nil {
 			return nil, err
 		}
@@ -101,8 +101,22 @@ func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 
 func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 	if r.Method != "POST" {
-		// index
-		return
+		c := appengine.NewContext(r)
+		var pomodoros []Pomodoro
+		// Paginate
+		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-Created").Limit(100)
+		if _, err := q.GetAll(c, &pomodoros); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if poms, err := json.Marshal(pomodoros); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, string(poms))
+			return
+		}
 	}
 	err := r.ParseForm()
 	if err != nil {
