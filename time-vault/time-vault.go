@@ -6,12 +6,11 @@ import (
 	"strconv"
 	"time"
 	"errors"
+	"fmt"
 
 	"appengine"
 	"appengine/datastore"
 	"appengine/user"
-
-	"fmt"
 )
 
 type TimevaultUser struct {
@@ -114,12 +113,7 @@ func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 			return
 		}
 	}
-	err := r.ParseForm()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	duration, err := strconv.ParseInt(r.Form["duration"][0], 10, 0)
+	duration, err := strconv.ParseInt(r.FormValue("duration"), 10, 0)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
