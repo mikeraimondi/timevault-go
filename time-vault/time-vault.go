@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"errors"
 
 	"appengine"
 	"appengine/datastore"
@@ -31,13 +32,6 @@ func (u *TimevaultUser) String() string {
 	return u.Username
 }
 
-func (u *TimevaultUser) Error() string {
-	if u.ID == "" {
-		return "Not Logged In"
-	}
-	return ""
-}
-
 func init() {
 	http.HandleFunc("/", withAuth(root))
 	http.HandleFunc("/pomodoros", withAuth(index))
@@ -46,12 +40,16 @@ func init() {
 func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if curUser, err := authenticate(w, r); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		} else {
-			if curUser.Error() == "Not Logged In" {
+			if err.Error() == "Not Logged In" {
+				c := appengine.NewContext(r)
+				url, _ := user.LoginURL(c, "/")
+				http.Redirect(w, r, url, 302)
+				return
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+		} else {
 			handler(w, r, curUser)
 		}
 	}
@@ -82,9 +80,7 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 			return &users[0], nil
 		}
 	} else {
-		url, _ := user.LoginURL(c, "/")
-		http.Redirect(w, r, url, 302)
-		return &TimevaultUser{}, nil
+		return nil, errors.New("Not Logged In")
 	}
 }
 
@@ -102,9 +98,9 @@ func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
-		var pomodoros []Pomodoro
 		// Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-Created").Limit(100)
+		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-Created").Limit(1000)
+		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
