@@ -25,6 +25,7 @@ type Pomodoro struct {
 	User     string
 	Duration int64
 	Created  time.Time
+	Finished time.Time
 }
 
 func (u *TimevaultUser) String() string {
@@ -34,6 +35,7 @@ func (u *TimevaultUser) String() string {
 func init() {
 	http.HandleFunc("/", withAuth(root))
 	http.HandleFunc("/pomodoros", withAuth(index))
+	http.HandleFunc("/endpomodoro", endPomodoro)
 }
 
 func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) http.HandlerFunc {
@@ -125,15 +127,41 @@ func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 	}
 	c := appengine.NewContext(r)
 	key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
-	if _, err := datastore.Put(c, key, newPomodoro); err != nil {
+	if key, err := datastore.Put(c, key, newPomodoro); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	} else {
+		pom, err := json.Marshal(newPomodoro)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// TODO Enqueue worker with key
+		fmt.Fprint(w, string(pom), key.Encode())
 	}
-	pom, err := json.Marshal(newPomodoro)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+}
+
+func endPomodoro(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		c := appengine.NewContext(r)
+		var pom Pomodoro
+		if key,err := datastore.DecodeKey(r.FormValue("key")); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			if err := datastore.Get(c, key, &pom); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}	
+		if p, err := json.Marshal(pom); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			// TODO end the pomodoro
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, string(p))
+		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(w, string(pom))
 }
