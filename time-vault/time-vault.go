@@ -2,35 +2,16 @@ package timevault
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
-	"errors"
-	"fmt"
 
 	"appengine"
 	"appengine/datastore"
 	"appengine/user"
 )
-
-type TimevaultUser struct {
-	ID          string
-	Email       string
-	Username    string
-	PhoneNumber string
-	Created     time.Time
-}
-
-type Pomodoro struct {
-	User     string
-	Duration int64
-	Created  time.Time
-	Finished time.Time
-}
-
-func (u *TimevaultUser) String() string {
-	return u.Username
-}
 
 func init() {
 	http.HandleFunc("/", withAuth(root))
@@ -70,7 +51,7 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 				Email:       u.Email,
 				Username:    u.String(),
 				PhoneNumber: "555-5555",
-				Created:     time.Now(),
+				CreatedAt:   time.Now(),
 			}
 			key := datastore.NewIncompleteKey(c, "TimevaultUser", nil)
 			if _, err := datastore.Put(c, key, newUser); err != nil {
@@ -99,8 +80,8 @@ func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
-		// Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-Created").Limit(1000)
+		// TODO Paginate
+		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-CreatedAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -121,9 +102,10 @@ func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 		return
 	}
 	newPomodoro := &Pomodoro{
-		User:     curUser.ID,
-		Duration: duration,
-		Created:  time.Now(),
+		User:      curUser.ID,
+		Duration:  duration,
+		CreatedAt: time.Now(),
+		Finished:  false,
 	}
 	c := appengine.NewContext(r)
 	key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
@@ -146,22 +128,26 @@ func endPomodoro(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		c := appengine.NewContext(r)
 		var pom Pomodoro
-		if key,err := datastore.DecodeKey(r.FormValue("key")); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if key, err := datastore.DecodeKey(r.FormValue("key")); err != nil {
+			c.Errorf("%v", err)
 			return
 		} else {
 			if err := datastore.Get(c, key, &pom); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.Errorf("%v", err)
 				return
 			}
-		}	
-		if p, err := json.Marshal(pom); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			pom.Finished = true
+			pom.FinishedAt = time.Now()
+			if _, err := datastore.Put(c, key, &pom); err != nil {
+				c.Errorf("%v", err)
+				return
+			}
+			// TODO hardcoded values
+			if _, err := sendTwilioMessage("+16175003913", "+16787612326", "Pomodoro complete!", c); err != nil {
+				c.Errorf("%v", err)
+				return
+			}
 			return
-		} else {
-			// TODO end the pomodoro
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, string(p))
 		}
 	}
 }
