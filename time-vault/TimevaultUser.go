@@ -1,9 +1,12 @@
 package timevault
 
-import "time"
+import (
+	"appengine/datastore"
+	"time"
+)
 
 type TimevaultUser struct {
-	ID          string
+	OwnKey      *datastore.Key
 	Email       string
 	Username    string
 	PhoneNumber string

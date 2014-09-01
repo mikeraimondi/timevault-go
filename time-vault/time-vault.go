@@ -40,25 +40,22 @@ func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) 
 func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error) {
 	c := appengine.NewContext(r)
 	if u := user.Current(c); u != nil {
-		q := datastore.NewQuery("TimevaultUser").Filter("ID =", u.ID).Limit(1)
-		var users []TimevaultUser
-		if _, err := q.GetAll(c, &users); err != nil {
-			return nil, err
-		}
-		if len(users) == 0 {
+		key := datastore.NewKey(c, "TimevaultUser", u.ID, 0, nil)
+		curUser := &TimevaultUser{}
+		if err := datastore.Get(c, key, curUser); err != nil {
+			// TODO check type of error, only create new user if error is errnotfound
 			newUser := &TimevaultUser{
-				ID:        u.ID,
+				OwnKey:    key,
 				Email:     u.Email,
 				Username:  u.String(),
 				CreatedAt: time.Now(),
 			}
-			key := datastore.NewIncompleteKey(c, "TimevaultUser", nil)
 			if _, err := datastore.Put(c, key, newUser); err != nil {
 				return nil, err
 			}
 			return newUser, nil
 		} else {
-			return &users[0], nil
+			return curUser, nil
 		}
 	} else {
 		return nil, errors.New("Not Logged In")
@@ -80,7 +77,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
 		// TODO Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("User =", currentUser.ID).Order("-CreatedAt").Limit(1000)
+		q := datastore.NewQuery("Pomodoro").Filter("User =", currentUser.OwnKey).Order("-CreatedAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -101,7 +98,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 		return
 	}
 	newPomodoro := &Pomodoro{
-		User:      currentUser.ID,
+		User:      currentUser.OwnKey,
 		Duration:  duration,
 		CreatedAt: time.Now(),
 		Finished:  false,
@@ -146,8 +143,12 @@ func endPomodoro(w http.ResponseWriter, r *http.Request) {
 				c.Errorf("%v", err)
 				return
 			}
-			// TODO hardcoded values
-			if _, err := sendTwilioMessage(config.TwilioNumber, "+16787612326", "Pomodoro complete!", &c); err != nil {
+			var u TimevaultUser
+			if err := datastore.Get(c, pom.User, &u); err != nil {
+				c.Errorf("%v", err)
+				return
+			}
+			if _, err := sendTwilioMessage(config.TwilioNumber, u.PhoneNumber, "Pomodoro complete!", &c); err != nil {
 				c.Errorf("%v", err)
 				return
 			}
