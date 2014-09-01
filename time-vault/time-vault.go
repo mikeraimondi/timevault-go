@@ -21,7 +21,7 @@ func init() {
 
 func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if curUser, err := authenticate(w, r); err != nil {
+		if currentUser, err := authenticate(w, r); err != nil {
 			if err.Error() == "Not Logged In" {
 				c := appengine.NewContext(r)
 				url, _ := user.LoginURL(c, "/")
@@ -32,7 +32,7 @@ func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) 
 				return
 			}
 		} else {
-			handler(w, r, curUser)
+			handler(w, r, currentUser)
 		}
 	}
 }
@@ -47,11 +47,10 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 		}
 		if len(users) == 0 {
 			newUser := &TimevaultUser{
-				ID:          u.ID,
-				Email:       u.Email,
-				Username:    u.String(),
-				PhoneNumber: "555-5555",
-				CreatedAt:   time.Now(),
+				ID:        u.ID,
+				Email:     u.Email,
+				Username:  u.String(),
+				CreatedAt: time.Now(),
 			}
 			key := datastore.NewIncompleteKey(c, "TimevaultUser", nil)
 			if _, err := datastore.Put(c, key, newUser); err != nil {
@@ -66,8 +65,8 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 	}
 }
 
-func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
-	if us, err := json.Marshal(curUser); err != nil {
+func root(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
+	if us, err := json.Marshal(currentUser); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	} else {
@@ -77,11 +76,11 @@ func root(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 	}
 }
 
-func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
+func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
 		// TODO Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("User =", curUser.ID).Order("-CreatedAt").Limit(1000)
+		q := datastore.NewQuery("Pomodoro").Filter("User =", currentUser.ID).Order("-CreatedAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -102,7 +101,7 @@ func index(w http.ResponseWriter, r *http.Request, curUser *TimevaultUser) {
 		return
 	}
 	newPomodoro := &Pomodoro{
-		User:      curUser.ID,
+		User:      currentUser.ID,
 		Duration:  duration,
 		CreatedAt: time.Now(),
 		Finished:  false,
@@ -142,8 +141,13 @@ func endPomodoro(w http.ResponseWriter, r *http.Request) {
 				c.Errorf("%v", err)
 				return
 			}
+			config, err := getConfig(&c)
+			if err != nil {
+				c.Errorf("%v", err)
+				return
+			}
 			// TODO hardcoded values
-			if _, err := sendTwilioMessage("+16175003913", "+16787612326", "Pomodoro complete!", c); err != nil {
+			if _, err := sendTwilioMessage(config.TwilioNumber, "+16787612326", "Pomodoro complete!", &c); err != nil {
 				c.Errorf("%v", err)
 				return
 			}
