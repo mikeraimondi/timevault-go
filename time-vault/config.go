@@ -25,20 +25,17 @@ func getConfig(c *appengine.Context) (*Config, error) {
 	if globalConfig.Active {
 		return globalConfig, nil
 	} else {
-		q := datastore.NewQuery("Config").Limit(1)
-		var configs []Config
-		if _, err := q.GetAll(*c, &configs); err != nil {
-			return nil, err
-		} else if len(configs) == 0 {
-			key := datastore.NewIncompleteKey(*c, "Config", nil)
+		key := datastore.NewKey(*c, "Config", "TimeVaultConfig", 0, nil)
+		if err := datastore.Get(*c, key, globalConfig); err == datastore.ErrNoSuchEntity {
 			if _, err := datastore.Put(*c, key, globalConfig); err != nil {
-				return nil, err
+				return globalConfig, err
 			}
-			return nil, errors.New("No configuration found")
-		} else if !configs[0].Active {
-			return nil, errors.New("No configuration found")
+			return globalConfig, errors.New("No configuration found")
+		} else if err != nil {
+			return globalConfig, err
+		} else if !globalConfig.Active {
+			return globalConfig, errors.New("No configuration found")
 		} else {
-			globalConfig = &configs[0]
 			return globalConfig, nil
 		}
 	}

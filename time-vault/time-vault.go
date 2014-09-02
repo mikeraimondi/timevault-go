@@ -42,23 +42,25 @@ func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error
 	if u := user.Current(c); u != nil {
 		key := datastore.NewKey(c, "TimevaultUser", u.ID, 0, nil)
 		curUser := &TimevaultUser{}
-		if err := datastore.Get(c, key, curUser); err != nil {
-			// TODO check type of error, only create new user if error is errnotfound
+		if err := datastore.Get(c, key, curUser); err == datastore.ErrNoSuchEntity {
 			newUser := &TimevaultUser{
+				// TODO shouldn't need to store the key
 				OwnKey:    key,
 				Email:     u.Email,
 				Username:  u.String(),
 				CreatedAt: time.Now(),
 			}
 			if _, err := datastore.Put(c, key, newUser); err != nil {
-				return nil, err
+				return newUser, err
 			}
 			return newUser, nil
+		} else if err != nil {
+			return curUser, err
 		} else {
 			return curUser, nil
 		}
 	} else {
-		return nil, errors.New("Not Logged In")
+		return &TimevaultUser{}, errors.New("Not Logged In")
 	}
 }
 
