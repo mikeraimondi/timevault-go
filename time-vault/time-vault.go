@@ -125,6 +125,11 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 func endPomodoro(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		c := appengine.NewContext(r)
+		config, err := getConfig(&c)
+		if err != nil {
+			c.Errorf("%v", err)
+			return
+		}
 		var pom Pomodoro
 		if key, err := datastore.DecodeKey(r.FormValue("key")); err != nil {
 			c.Errorf("%v", err)
@@ -134,14 +139,13 @@ func endPomodoro(w http.ResponseWriter, r *http.Request) {
 				c.Errorf("%v", err)
 				return
 			}
+			if pom.Finished {
+				c.Warningf("%v", "Pomodoro already completed")
+				return
+			}
 			pom.Finished = true
 			pom.FinishedAt = time.Now()
 			if _, err := datastore.Put(c, key, &pom); err != nil {
-				c.Errorf("%v", err)
-				return
-			}
-			config, err := getConfig(&c)
-			if err != nil {
 				c.Errorf("%v", err)
 				return
 			}
