@@ -102,7 +102,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	}
 	newPomodoro := &Pomodoro{
 		User:      currentUser.OwnKey,
-		Duration:  duration,
+		Duration:  time.Duration(duration) * time.Second,
 		CreatedAt: time.Now(),
 		Finished:  false,
 	}
@@ -112,15 +112,15 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	} else {
-		pom, err := json.Marshal(newPomodoro)
-		if err != nil {
+		// TODO use Delay package?
+		t := taskqueue.NewPOSTTask("/endpomodoro", map[string][]string{"key": {key.Encode()}})
+		t.Delay = newPomodoro.Duration
+		if _, err := taskqueue.Add(c, t, ""); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// TODO use Delay package?
-		t := taskqueue.NewPOSTTask("/endpomodoro", map[string][]string{"key": {key.Encode()}})
-		t.Delay = time.Duration(newPomodoro.Duration) * time.Second
-		if _, err := taskqueue.Add(c, t, ""); err != nil {
+		pom, err := json.Marshal(newPomodoro)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -129,6 +129,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	}
 }
 
+// TODO admin-only auth
 func endPomodoro(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		c := appengine.NewContext(r)

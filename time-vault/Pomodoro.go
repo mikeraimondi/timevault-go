@@ -7,7 +7,7 @@ import (
 
 type Pomodoro struct {
 	User       *datastore.Key
-	Duration   int64
+	Duration   time.Duration
 	CreatedAt  time.Time
 	Finished   bool
 	FinishedAt time.Time
