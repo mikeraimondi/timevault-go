@@ -10,6 +10,7 @@ import (
 
 	"appengine"
 	"appengine/datastore"
+	"appengine/taskqueue"
 	"appengine/user"
 )
 
@@ -116,8 +117,14 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// TODO use Delay package?
+		t := taskqueue.NewPOSTTask("/endpomodoro", map[string][]string{"key": {key.Encode()}})
+		t.Delay = time.Duration(newPomodoro.Duration) * time.Second
+		if _, err := taskqueue.Add(c, t, ""); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		// TODO Enqueue worker with key
 		fmt.Fprint(w, string(pom), key.Encode())
 	}
 }
