@@ -77,7 +77,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
 		// TODO Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("user =", currentUser.Key(&c)).Order("-createdAt").Limit(1000)
+		q := datastore.NewQuery("Pomodoro").Ancestor(currentUser.Key(&c)).Order("-createdAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -99,12 +99,11 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	}
 	c := appengine.NewContext(r)
 	newPomodoro := &Pomodoro{
-		User:      currentUser.Key(&c),
 		Duration:  time.Duration(duration) * time.Second,
 		CreatedAt: time.Now(),
 		Finished:  false,
 	}
-	key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
+	key := datastore.NewIncompleteKey(c, "Pomodoro", currentUser.Key(&c))
 	if key, err := datastore.Put(c, key, newPomodoro); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -155,7 +154,7 @@ func endPomodoro(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			var u TimevaultUser
-			if err := datastore.Get(c, pom.User, &u); err != nil {
+			if err := datastore.Get(c, key.Parent(), &u); err != nil {
 				c.Errorf("%v", err)
 				return
 			}

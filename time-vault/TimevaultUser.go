@@ -19,5 +19,6 @@ func (u *TimevaultUser) String() string {
 }
 
 func (u *TimevaultUser) Key(c *appengine.Context) *datastore.Key {
+	// TODO memoize
 	return datastore.NewKey(*c, "TimevaultUser", u.GoogleAccountID, 0, nil)
 }

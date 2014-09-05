@@ -11,7 +11,7 @@ indexes:
 # your application using appcfg.py.
 
 - kind: Pomodoro
+  ancestor: yes
   properties:
-  - name: user
   - name: createdAt
     direction: desc
