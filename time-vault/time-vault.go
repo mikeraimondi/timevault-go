@@ -41,20 +41,17 @@ func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) 
 func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error) {
 	c := appengine.NewContext(r)
 	if u := user.Current(c); u != nil {
-		key := datastore.NewKey(c, "TimevaultUser", u.ID, 0, nil)
-		curUser := &TimevaultUser{}
-		if err := datastore.Get(c, key, curUser); err == datastore.ErrNoSuchEntity {
-			newUser := &TimevaultUser{
-				// TODO shouldn't need to store the key
-				OwnKey:    key,
-				Email:     u.Email,
-				Username:  u.String(),
-				CreatedAt: time.Now(),
+		curUser := &TimevaultUser{
+			GoogleAccountID: u.ID,
+		}
+		if err := datastore.Get(c, curUser.Key(&c), curUser); err == datastore.ErrNoSuchEntity {
+			curUser.Email = u.Email
+			curUser.Username = u.String()
+			curUser.CreatedAt = time.Now()
+			if _, err := datastore.Put(c, curUser.Key(&c), curUser); err != nil {
+				return curUser, err
 			}
-			if _, err := datastore.Put(c, key, newUser); err != nil {
-				return newUser, err
-			}
-			return newUser, nil
+			return curUser, nil
 		} else if err != nil {
 			return curUser, err
 		} else {
@@ -80,7 +77,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
 		// TODO Paginate
-		q := datastore.NewQuery("Pomodoro").Filter("User =", currentUser.OwnKey).Order("-CreatedAt").Limit(1000)
+		q := datastore.NewQuery("Pomodoro").Filter("user =", currentUser.Key(&c)).Order("-createdAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -100,13 +97,13 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	c := appengine.NewContext(r)
 	newPomodoro := &Pomodoro{
-		User:      currentUser.OwnKey,
+		User:      currentUser.Key(&c),
 		Duration:  time.Duration(duration) * time.Second,
 		CreatedAt: time.Now(),
 		Finished:  false,
 	}
-	c := appengine.NewContext(r)
 	key := datastore.NewIncompleteKey(c, "Pomodoro", nil)
 	if key, err := datastore.Put(c, key, newPomodoro); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

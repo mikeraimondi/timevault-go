@@ -12,17 +12,6 @@ indexes:
 
 - kind: Pomodoro
   properties:
-  - name: User
-  - name: Created
-
-- kind: Pomodoro
-  properties:
-  - name: User
-  - name: Created
-    direction: desc
-
-- kind: Pomodoro
-  properties:
-  - name: User
-  - name: CreatedAt
+  - name: user
+  - name: createdAt
     direction: desc

@@ -8,12 +8,12 @@ import (
 )
 
 type Config struct {
-	Active            bool
-	TwilioURL         string
-	TwilioMessagePath string
-	TwilioSID         string
-	TwilioToken       string
-	TwilioNumber      string
+	Active            bool   `datastore:"active"             json:"active"`
+	TwilioURL         string `datastore:"twilioURL"          json:"twilioURL"`
+	TwilioMessagePath string `datastore:"twilioMessagePath"  json:"twilioMessagePath"`
+	TwilioSID         string `datastore:"twilioSID"          json:"twilioSID"`
+	TwilioToken       string `datastore:"twilioToken"        json:"twilioToken"`
+	TwilioNumber      string `datastore:"twilioNumber"       json:"twilioNumber"`
 }
 
 var globalConfig = &Config{
