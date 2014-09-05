@@ -2,7 +2,6 @@ package timevault
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 )
 
 func init() {
-	http.HandleFunc("/", withAuth(root))
+	http.HandleFunc("/users", withAuth(users))
 	http.HandleFunc("/pomodoros", withAuth(index))
 	http.HandleFunc("/endpomodoro", endPomodoro)
 }
@@ -25,7 +24,7 @@ func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) 
 		if currentUser, err := authenticate(w, r); err != nil {
 			if err.Error() == "Not Logged In" {
 				c := appengine.NewContext(r)
-				url, _ := user.LoginURL(c, "/")
+				url, _ := user.LoginURL(c, r.URL.String())
 				http.Redirect(w, r, url, 302)
 				return
 			} else {
@@ -40,29 +39,24 @@ func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) 
 
 func authenticate(w http.ResponseWriter, r *http.Request) (*TimevaultUser, error) {
 	c := appengine.NewContext(r)
-	if u := user.Current(c); u != nil {
-		curUser := &TimevaultUser{
-			GoogleAccountID: u.ID,
-		}
-		if err := datastore.Get(c, curUser.Key(&c), curUser); err == datastore.ErrNoSuchEntity {
-			curUser.Email = u.Email
-			curUser.Username = u.String()
-			curUser.CreatedAt = time.Now()
-			if _, err := datastore.Put(c, curUser.Key(&c), curUser); err != nil {
-				return curUser, err
-			}
-			return curUser, nil
-		} else if err != nil {
+	curUser, err := NewTimevaultUser(&c)
+	// TODO cleanup
+	if err != nil {
+		return curUser, err
+	}
+	if err := datastore.Get(c, curUser.CachedKey, curUser); err == datastore.ErrNoSuchEntity {
+		if _, err := datastore.Put(c, curUser.CachedKey, curUser); err != nil {
 			return curUser, err
-		} else {
-			return curUser, nil
 		}
+		return curUser, nil
+	} else if err != nil {
+		return curUser, err
 	} else {
-		return &TimevaultUser{}, errors.New("Not Logged In")
+		return curUser, nil
 	}
 }
 
-func root(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
+func users(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if us, err := json.Marshal(currentUser); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -77,7 +71,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 	if r.Method != "POST" {
 		c := appengine.NewContext(r)
 		// TODO Paginate
-		q := datastore.NewQuery("Pomodoro").Ancestor(currentUser.Key(&c)).Order("-createdAt").Limit(1000)
+		q := datastore.NewQuery("Pomodoro").Ancestor(currentUser.CachedKey).Order("-createdAt").Limit(1000)
 		pomodoros := make([]Pomodoro, 0, 1000)
 		if _, err := q.GetAll(c, &pomodoros); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -103,7 +97,7 @@ func index(w http.ResponseWriter, r *http.Request, currentUser *TimevaultUser) {
 		CreatedAt: time.Now(),
 		Finished:  false,
 	}
-	key := datastore.NewIncompleteKey(c, "Pomodoro", currentUser.Key(&c))
+	key := datastore.NewIncompleteKey(c, "Pomodoro", currentUser.CachedKey)
 	if key, err := datastore.Put(c, key, newPomodoro); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
