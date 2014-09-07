@@ -32,3 +32,27 @@ func NewTimevaultUser(c *appengine.Context) (*TimevaultUser, error) {
 func (u *TimevaultUser) String() string {
 	return u.Username
 }
+
+func (u *TimevaultUser) Pomodoros(c *appengine.Context) (*[]Pomodoro, error) {
+	q := datastore.NewQuery("Pomodoro").Ancestor(u.CachedKey).Order("-createdAt").Limit(1000)
+	pomodoros := (make([]Pomodoro, 0, 1000))
+	_, err := q.GetAll(*c, &pomodoros)
+	return &pomodoros, err
+}
+
+func (u *TimevaultUser) NewPomodoro(c *appengine.Context, duration int64) (*Pomodoro, error) {
+	p := &Pomodoro{
+		Duration:  time.Duration(duration) * time.Second,
+		CreatedAt: time.Now(),
+		Finished:  false,
+	}
+	key := datastore.NewIncompleteKey(*c, "Pomodoro", u.CachedKey)
+	key, err := datastore.Put(*c, key, p)
+	if err != nil {
+		return p, err
+	}
+	if err := p.Finish(c, key); err != nil {
+		return p, err
+	}
+	return p, nil
+}
