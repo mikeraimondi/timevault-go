@@ -33,11 +33,11 @@ func (u *TimevaultUser) String() string {
 	return u.Username
 }
 
-func (u *TimevaultUser) Pomodoros(c *appengine.Context) (*[]Pomodoro, error) {
+func (u *TimevaultUser) Pomodoros(c *appengine.Context) ([]Pomodoro, error) {
 	q := datastore.NewQuery("Pomodoro").Ancestor(u.CachedKey).Order("-createdAt").Limit(1000)
-	pomodoros := (make([]Pomodoro, 0, 1000))
+	var pomodoros []Pomodoro
 	_, err := q.GetAll(*c, &pomodoros)
-	return &pomodoros, err
+	return pomodoros, err
 }
 
 func (u *TimevaultUser) NewPomodoro(c *appengine.Context, duration int64) (*Pomodoro, error) {

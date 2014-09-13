@@ -62,6 +62,7 @@ func users(w http.ResponseWriter, r *http.Request, u *TimevaultUser) {
 func pomodoros(w http.ResponseWriter, r *http.Request, u *TimevaultUser) {
 	c := appengine.NewContext(r)
 	if r.Method != "POST" {
+		// Index
 		pomodoros, err := u.Pomodoros(&c)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -71,6 +72,7 @@ func pomodoros(w http.ResponseWriter, r *http.Request, u *TimevaultUser) {
 		json.NewEncoder(w).Encode(pomodoros)
 		return
 	}
+	// Create
 	duration, err := strconv.ParseInt(r.FormValue("duration"), 10, 0)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
