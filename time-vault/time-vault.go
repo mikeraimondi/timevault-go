@@ -11,8 +11,8 @@ import (
 )
 
 func init() {
-	http.HandleFunc("/users", withAuth(users))
-	http.HandleFunc("/pomodoros", withAuth(pomodoros))
+	http.HandleFunc("/api/users", withAuth(users))
+	http.HandleFunc("/api/pomodoros", withAuth(pomodoros))
 }
 
 func withAuth(handler func(http.ResponseWriter, *http.Request, *TimevaultUser)) http.HandlerFunc {

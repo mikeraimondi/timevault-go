@@ -9,6 +9,13 @@ handlers:
   login: admin
   secure: always
 
-- url: /.*
+- url: /api/.*
   script: _go_app
   secure: always
+
+- url: /assets
+  static_dir: assets
+
+- url: /.*
+  static_files: static/index.html
+  upload: static/index.html
