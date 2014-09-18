@@ -13,11 +13,27 @@ handlers:
   script: _go_app
   secure: always
 
-- url: /assets
-  static_dir: assets
+- url: /views
+  static_dir: angular/dist/views
   secure: always
 
-- url: /.*
-  static_files: static/index.html
-  upload: static/index.html
+- url: /scripts
+  static_dir: angular/dist/scripts
+  secure: always
+
+- url: /styles
+  static_dir: angular/dist/styles
+  secure: always
+
+- url: /images
+  static_dir: angular/dist/images
+  secure: always
+
+- url: /bower_components
+  static_dir: angular/dist/bower_components
+  secure: always
+
+- url: /
+  static_files: angular/dist/index.html
+  upload: angular/dist/index.html
   secure: always
