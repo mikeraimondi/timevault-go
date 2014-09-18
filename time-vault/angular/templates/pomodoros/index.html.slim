@@ -1,0 +1,16 @@
+div(ng-init='init()')
+  div(ng-hide='runningPomodoro()')
+    button.btn.btn-primary(ng-click='addWorkPeriod()') Work
+    button.btn.btn-default(ng-click='addBreakPeriod()') Break
+  div.list-group(ng-repeat='pomodoro in pomodoros | orderBy:"start":true')
+    .list-group-item
+      a.list-group-item-heading(ng-click='viewPomodoro(pomodoro.id)')
+        ' {{ pomodoro.activity }} on {{ pomodoro.start | date:'medium' }}
+      .row
+        .col-md-11
+          progressbar(value='pomodoro.percentageLeft' type='{{pomodoro.progressBarType}}')
+            span
+              ' {{pomodoro.remainingTime}}
+        .col-md-1
+          a.btn.btn-danger(ng-click='destroyPomodoro(pomodoro.id)')
+            span.glyphicon.glyphicon-remove

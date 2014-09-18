@@ -16,11 +16,34 @@ module.exports = function(grunt) {
     //   }
     // },
 
+    coffee: {
+      dist: {
+        options: {
+          sourceMap: true
+        },
+        files: {
+          'time-vault/assets/js/app.js': ['time-vault/angular/**/*.coffee']
+        }
+      }
+    },
+
     uglify: {
       dist: {
+        options: {
+          sourceMap: true,
+          sourceMapIn: 'time-vault/assets/js/app.js.map'
+        },
         files: {
-          'js/app.min.js': ['bower_components/angular/angular.js']
-          // 'js/modernizr.min.js': 'bower_components/modernizr/modernizr.js'
+          'time-vault/assets/js/app.min.js': ['time-vault/assets/js/app.js']
+        }
+      }
+    },
+
+    copy: {
+      dist: {
+        files: {
+          'time-vault/assets/js/angular.min.js': 'bower_components/angular/angular.min.js',
+          'time-vault/assets/js/angular.min.js.map': 'bower_components/angular/angular.min.js.map'
         }
       }
     },
@@ -42,9 +65,10 @@ module.exports = function(grunt) {
 
   // grunt.loadNpmTasks('grunt-sass');
   // grunt.loadNpmTasks('grunt-contrib-watch');
+  grunt.loadNpmTasks('grunt-contrib-coffee');
   grunt.loadNpmTasks('grunt-contrib-uglify');
-
+  grunt.loadNpmTasks('grunt-contrib-copy');
   // grunt.registerTask('build', ['sass', 'uglify']);
-  grunt.registerTask('build', ['uglify']);
-  grunt.registerTask('default', ['build','watch']);
+  grunt.registerTask('build', ['coffee', 'copy', 'uglify']);
+  grunt.registerTask('default', ['build', 'watch']);
 };

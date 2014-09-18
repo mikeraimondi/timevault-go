@@ -15,7 +15,9 @@ handlers:
 
 - url: /assets
   static_dir: assets
+  secure: always
 
 - url: /.*
   static_files: static/index.html
   upload: static/index.html
+  secure: always

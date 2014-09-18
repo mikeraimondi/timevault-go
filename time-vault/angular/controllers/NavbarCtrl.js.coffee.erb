@@ -1,0 +1,36 @@
+@timevault.controller 'NavbarCtrl', [
+  '$scope', '$location', 'Auth', '$modal',
+  ($scope, $location, Auth, $modal) ->
+
+    $scope.init = ->
+      $scope.currentUser = {}
+
+      Auth.currentUser().then(
+        (user) ->
+          $scope.currentUser = user
+        (error) ->
+          console.log error)
+
+    $scope.userSignedIn = ->
+      !!$scope.currentUser.email
+
+    $scope.login = ->
+      Auth.login($scope.user).then (user) ->
+        $scope.currentUser = user
+        $scope.user = {}
+
+    $scope.logout = ->
+      Auth.logout().then (oldUser) ->
+        $scope.currentUser = {}
+        $location.path( '/' )
+
+    $scope.open = ->
+      modalInstance = $modal.open
+        templateUrl: '<%= asset_path("registrations/new.html") %>',
+        controller: 'RegistrationCtrl',
+
+      modalInstance.result.then (registeredUser) ->
+        if registeredUser?
+          $scope.user = registeredUser
+          $scope.login()
+]
