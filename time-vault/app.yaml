@@ -33,7 +33,7 @@ handlers:
   static_dir: angular/dist/bower_components
   secure: always
 
-- url: /
+- url: /.*
   static_files: angular/dist/index.html
   upload: angular/dist/index.html
   secure: always

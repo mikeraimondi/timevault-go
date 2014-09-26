@@ -1,19 +1,19 @@
 'use strict'
 
-describe 'Controller: MainCtrl', ->
+describe 'Controller: PomodorosCtrl', ->
 
   # load the controller's module
   beforeEach module 'timevaultApp'
 
-  MainCtrl = {}
+  PomodorosCtrl = {}
   scope = {}
 
   # Initialize the controller and a mock scope
   beforeEach inject ($controller, $rootScope) ->
     scope = $rootScope.$new()
-    MainCtrl = $controller 'MainCtrl', {
+    PomodorosCtrl = $controller 'PomodorosCtrl', {
       $scope: scope
     }
 
-  it 'should have the app name', ->
-    expect(scope.appName).toBe 'Timevault'
+  # it 'should attach a list of awesomeThings to the scope', ->
+  #   expect(scope.awesomeThings.length).toBe 3
