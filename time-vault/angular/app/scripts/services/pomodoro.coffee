@@ -18,7 +18,7 @@ angular.module('timevaultApp')
       create: (attrs) ->
         new @service(pomodoro: attrs).$save (pomodoro) ->
           attrs.id = pomodoro.id
-          attrs.start = pomodoro.start
+          attrs.createdAt = pomodoro.createdAt
           attrs.activity = pomodoro.activity
         attrs
 
@@ -32,8 +32,8 @@ angular.module('timevaultApp')
         @service.delete id: id
 
       remainingSeconds: (pomodoro) ->
-        pomodoroStart = new Date(pomodoro.start)
-        endSeconds = pomodoroStart.getSeconds() + pomodoro.set_duration
+        pomodoroStart = new Date(pomodoro.createdAt)
+        endSeconds = pomodoroStart.getSeconds() + (pomodoro.duration / 1000000000)
         pomodoroEnd = pomodoroStart.setSeconds(endSeconds)
         now = new Date()
         remaining = pomodoroEnd - now
@@ -52,7 +52,7 @@ angular.module('timevaultApp')
         @remainingSeconds(pomodoro) / 60
         
       percentageLeft: (pomodoro) ->
-        Math.floor (@remainingSeconds(pomodoro) / pomodoro.set_duration) * 100
+        Math.floor (@remainingSeconds(pomodoro) / (pomodoro.duration / 1000000000)) * 100
 
       progressBarType: (pomodoro) ->
         percent = pomodoro.percentageLeft

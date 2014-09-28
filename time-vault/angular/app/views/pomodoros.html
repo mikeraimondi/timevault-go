@@ -1,1 +1,23 @@
-<p>This is the pomodoros view.</p>
+<div ng-init="init()">
+  <div ng-hide="runningPomodoro()">
+    <button class="btn btn-primary" ng-click="addWorkPeriod()">Work</button>
+    <button class="btn btn-default" ng-click="addBreakPeriod()">Break</button>
+  </div>
+  <div class="list-group" ng-repeat="pomodoro in pomodoros | orderBy:&quot;start&quot;:true">
+    <div class="list-group-item">
+      <a class="list-group-item-heading" ng-click="viewPomodoro(pomodoro.id)">{{ pomodoro.activity }} on {{ pomodoro.createdAt | date:'medium' }} </a>
+      <div class="row">
+        <div class="col-md-11">
+          <progressbar type="{{pomodoro.progressBarType}}" value="pomodoro.percentageLeft">
+            <span>{{pomodoro.remainingTime}}</span>
+          </progressbar>
+        </div>
+        <div class="col-md-1">
+          <a class="btn btn-danger" ng-click="destroyPomodoro(pomodoro.id)">
+            <span class="glyphicon glyphicon-remove"></span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
