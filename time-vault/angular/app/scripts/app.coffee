@@ -38,7 +38,10 @@ angular
         .when '/pomodoros',
           templateUrl: 'views/pomodoros.html'
           controller: 'PomodorosCtrl'
+        .when '/404',
+          templateUrl: 'views/notfound.html'
+          controller: 'NotfoundCtrl'
         .otherwise
-          redirectTo: '/'
+          redirectTo: '/404' 
   ])
 
