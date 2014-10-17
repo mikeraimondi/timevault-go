@@ -344,6 +344,24 @@ module.exports = function (grunt) {
       }
     },
 
+    // Generate application config
+    ngconstant: {
+      dist: {
+        options: {
+          name: 'timevaultApp',
+          wrap: '"use strict";\n\n{%= __ngModule %}',
+          dest: '.tmp/scripts/constants.js',
+          deps: false,
+          constants: {
+            config: grunt.file.readJSON('constants.json')
+          },
+          values: {
+            debug: true
+          }
+        }
+      }
+    },
+
     // Copies remaining files to places other tasks can use
     copy: {
       dist: {
@@ -365,6 +383,11 @@ module.exports = function (grunt) {
           cwd: '.tmp/images',
           dest: '<%= yeoman.dist %>/images',
           src: ['generated/*']
+        }, {
+          expand: true,
+          cwd: '<%= yeoman.app %>/scripts',
+          dest: '.tmp/scripts',
+          src: '{,*/}*.coffee'
         }, {
           expand: true,
           cwd: '.',
@@ -423,11 +446,6 @@ module.exports = function (grunt) {
     ]);
   });
 
-  grunt.registerTask('server', 'DEPRECATED TASK. Use the "serve" task instead', function (target) {
-    grunt.log.warn('The `server` task has been deprecated. Use `grunt serve` to start a server.');
-    grunt.task.run(['serve:' + target]);
-  });
-
   grunt.registerTask('test', [
     'clean:server',
     'concurrent:test',
@@ -440,6 +458,7 @@ module.exports = function (grunt) {
     'clean:dist',
     'wiredep',
     'useminPrepare',
+    'ngconstant',
     'concurrent:dist',
     'autoprefixer',
     'concat',

@@ -1,4 +1,4 @@
-package timevault
+package api
 
 import (
 	"errors"

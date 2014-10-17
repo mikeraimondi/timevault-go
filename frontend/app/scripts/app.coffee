@@ -42,6 +42,6 @@ angular
           templateUrl: 'views/notfound.html'
           controller: 'NotfoundCtrl'
         .otherwise
-          redirectTo: '/404' 
+          redirectTo: '/404'
   ])
 

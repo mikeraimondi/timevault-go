@@ -8,10 +8,10 @@
  # Factory in the timevaultApp.
 ###
 angular.module('timevaultApp')
-  .factory 'Pomodoro', ['$resource', ($resource) ->
+  .factory 'Pomodoro', ['$resource', 'config', ($resource, config) ->
     class Pomodoro
       constructor: ->
-        @service = $resource('/api/pomodoros/:id',
+        @service = $resource(config.url,
           {id: '@id'},
           {update: {method: 'PATCH'}})
 
