@@ -28,6 +28,9 @@ angular
       defaults.patch = defaults.patch || {}
       defaults.patch['Content-Type'] = 'application/json'
 
+      $httpProvider.defaults.useXDomain = true
+      delete defaults.common['X-Requested-With']
+
       $routeProvider
         .when '/',
           templateUrl: 'views/main.html'
