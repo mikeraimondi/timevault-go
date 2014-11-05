@@ -2,9 +2,11 @@ package api
 
 import (
 	"errors"
+	"time"
 
 	"appengine"
 	"appengine/datastore"
+	"github.com/gorilla/sessions"
 )
 
 type Config struct {
@@ -25,6 +27,8 @@ var globalConfig = &Config{
 	Active: false,
 }
 
+var globalStore *sessions.CookieStore
+
 func setConfig(c *appengine.Context) (err error) {
 	// TODO timeout: http://stackoverflow.com/questions/3777367/what-is-a-good-place-to-store-configuration-in-google-appengine-python
 	if globalConfig.Active {
@@ -41,6 +45,13 @@ func setConfig(c *appengine.Context) (err error) {
 		} else if !globalConfig.Active {
 			return errors.New("No configuration found")
 		} else {
+			// TODO this is a nasty side effect and I should rethink this function
+			globalStore = sessions.NewCookieStore([]byte(globalConfig.SessionSecret))
+			globalStore.Options = &sessions.Options{
+				Path:     "/",
+				MaxAge:   int((time.Hour * 24 * 7) / time.Second),
+				HttpOnly: true,
+			}
 			return
 		}
 	}

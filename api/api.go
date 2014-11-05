@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"strings"
-	"time"
 
 	"appengine"
 	"appengine/urlfetch"
@@ -38,10 +37,10 @@ const (
 var session *sessions.Session
 
 // config is the configuration specification supplied to the OAuth package.
-func oauthConfig(c *appengine.Context, appConfig *Config) (config *oauth2.Config, err error) {
+func oauthConfig(c *appengine.Context) (config *oauth2.Config, err error) {
 	config, err = oauth2.NewConfig(&oauth2.Options{
-		ClientID:     appConfig.GplusClientID,
-		ClientSecret: appConfig.GplusClientSecret,
+		ClientID:     globalConfig.GplusClientID,
+		ClientSecret: globalConfig.GplusClientSecret,
 		Scopes:       []string{"https://www.googleapis.com/auth/plus.login"},
 		RedirectURL:  gplusRedirectURL,
 	},
@@ -139,7 +138,7 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appE
 
 	// take an authentication code and exchanges it with the OAuth
 	// endpoint for a Google API bearer token and a Google+ ID
-	oauthConfig, err := oauthConfig(c, globalConfig)
+	oauthConfig, err := oauthConfig(c)
 	if err != nil {
 		return &appError{err, "Oauth configuration", 500}
 	}
@@ -203,7 +202,7 @@ func people(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appEr
 	}
 
 	// Create a new authorized API client
-	oauthConfig, err := oauthConfig(c, globalConfig)
+	oauthConfig, err := oauthConfig(c)
 	if err != nil {
 		return &appError{err, "Oauth configuration", 500}
 	}
@@ -255,13 +254,7 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// prevents memory leaks from Gorilla
 	defer context.Clear(r)
-	store := sessions.NewCookieStore([]byte(globalConfig.SessionSecret))
-	store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   int((time.Hour * 24 * 7) / time.Second),
-		HttpOnly: true,
-	}
-	session, err = store.Get(r, "timeVaultSession")
+	session, err = globalStore.Get(r, "timeVaultSession")
 	if err != nil {
 		// log.Println("error fetching session:", err)
 		// Ignore the initial session fetch error, as Get() always returns a
