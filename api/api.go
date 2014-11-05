@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"strings"
+	"time"
 
 	"appengine"
 	"appengine/urlfetch"
@@ -19,6 +20,7 @@ import (
 	"code.google.com/p/google-api-go-client/plus/v1"
 	"github.com/golang/oauth2"
 	"github.com/gorilla/context"
+	"github.com/gorilla/sessions"
 )
 
 // indexTemplate is the HTML template we use to present the index page.
@@ -32,6 +34,8 @@ type ClaimSet struct {
 const (
 	gplusRedirectURL = "postmessage"
 )
+
+var session *sessions.Session
 
 // config is the configuration specification supplied to the OAuth package.
 func oauthConfig(c *appengine.Context, appConfig *Config) (config *oauth2.Config, err error) {
@@ -82,7 +86,7 @@ func decodeIdToken(idToken string) (gplusID string, err error) {
 }
 
 // index sets up a session for the current user and serves the index page
-func index(w http.ResponseWriter, r *http.Request, c *appengine.Context, config *Config) *appError {
+func index(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
 	// This check prevents the "/" handler from handling all requests by default
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -91,13 +95,6 @@ func index(w http.ResponseWriter, r *http.Request, c *appengine.Context, config 
 
 	// Create a state token to prevent request forgery and store it in the session
 	// for later validation
-	session, err := config.Store.Get(r, "timeVaultSession")
-	if err != nil {
-		// log.Println("error fetching session:", err)
-		// Ignore the initial session fetch error, as Get() always returns a
-		// session, even if empty.
-		//return &appError{err, "Error fetching session", 500}
-	}
 	state := randomString(64)
 	session.Values["state"] = state
 	session.Save(r, w)
@@ -108,10 +105,10 @@ func index(w http.ResponseWriter, r *http.Request, c *appengine.Context, config 
 
 	var data = struct {
 		ApplicationName, ClientID, State string
-	}{config.GplusApplicationName, config.GplusClientID, stateURL}
+	}{globalConfig.GplusApplicationName, globalConfig.GplusClientID, stateURL}
 
 	// Render and serve the HTML
-	err = indexTemplate.Execute(w, data)
+	err := indexTemplate.Execute(w, data)
 	if err != nil {
 		// log.Println("error rendering template:", err)
 		return &appError{err, "Error rendering template", 500}
@@ -121,13 +118,9 @@ func index(w http.ResponseWriter, r *http.Request, c *appengine.Context, config 
 
 // connect exchanges the one-time authorization code for a token and stores the
 // token in the session
-func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context, config *Config) *appError {
+func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
 	// Ensure that the request is not a forgery and that the user sending this
 	// connect request is the expected user
-	session, err := config.Store.Get(r, "timeVaultSession")
-	if err != nil {
-		return &appError{err, "Error fetching session", 500}
-	}
 	if r.FormValue("state") != session.Values["state"].(string) {
 		m := "Invalid state parameter"
 		return &appError{errors.New(m), m, 401}
@@ -146,7 +139,7 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context, confi
 
 	// take an authentication code and exchanges it with the OAuth
 	// endpoint for a Google API bearer token and a Google+ ID
-	oauthConfig, err := oauthConfig(c, config)
+	oauthConfig, err := oauthConfig(c, globalConfig)
 	if err != nil {
 		return &appError{err, "Oauth configuration", 500}
 	}
@@ -176,13 +169,8 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context, confi
 }
 
 // disconnect revokes the current user's token and resets their session
-func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context, config *Config) *appError {
+func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
 	// Only disconnect a connected user
-	session, err := config.Store.Get(r, "timeVaultSession")
-	if err != nil {
-		// log.Println("error fetching session:", err)
-		return &appError{err, "Error fetching session", 500}
-	}
 	token := session.Values["accessToken"]
 	if token == nil {
 		m := "Current user not connected"
@@ -206,12 +194,7 @@ func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context, co
 }
 
 // people fetches the list of people user has shared with this app
-func people(w http.ResponseWriter, r *http.Request, c *appengine.Context, config *Config) *appError {
-	session, err := config.Store.Get(r, "timeVaultSession")
-	if err != nil {
-		// log.Println("error fetching session:", err)
-		return &appError{err, "Error fetching session", 500}
-	}
+func people(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
 	token := session.Values["accessToken"]
 	// Only fetch a list of people for connected users
 	if token == nil {
@@ -220,7 +203,7 @@ func people(w http.ResponseWriter, r *http.Request, c *appengine.Context, config
 	}
 
 	// Create a new authorized API client
-	oauthConfig, err := oauthConfig(c, config)
+	oauthConfig, err := oauthConfig(c, globalConfig)
 	if err != nil {
 		return &appError{err, "Oauth configuration", 500}
 	}
@@ -253,7 +236,7 @@ func people(w http.ResponseWriter, r *http.Request, c *appengine.Context, config
 }
 
 // appHandler is to be used in error handling
-type appHandler func(http.ResponseWriter, *http.Request, *appengine.Context, *Config) *appError
+type appHandler func(http.ResponseWriter, *http.Request, *appengine.Context) *appError
 
 type appError struct {
 	Err     error
@@ -264,18 +247,31 @@ type appError struct {
 // serveHTTP formats and passes up an error
 func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	config, err := getConfig(&c)
+	err := setConfig(&c)
 	if err != nil {
 		c.Errorf("%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if e := fn(w, r, &c, config); e != nil { // e is *appError, not os.Error.
+	// prevents memory leaks from Gorilla
+	defer context.Clear(r)
+	store := sessions.NewCookieStore([]byte(globalConfig.SessionSecret))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   int((time.Hour * 24 * 7) / time.Second),
+		HttpOnly: true,
+	}
+	session, err = store.Get(r, "timeVaultSession")
+	if err != nil {
+		// log.Println("error fetching session:", err)
+		// Ignore the initial session fetch error, as Get() always returns a
+		// session, even if empty.
+		//return &appError{err, "Error fetching session", 500}
+	}
+	if e := fn(w, r, &c); e != nil { // e is *appError, not os.Error.
 		c.Errorf("%v", e.Err)
 		http.Error(w, e.Message, e.Code)
 	}
-	// prevents memory leaks from Gorilla
-	context.Clear(r)
 }
 
 // randomString returns a random string with the specified length

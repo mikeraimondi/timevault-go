@@ -11,7 +11,7 @@ import (
 )
 
 func sendTwilioMessage(from string, to string, body string, c *appengine.Context) (*http.Response, error) {
-	config, err := getConfig(c)
+	err := setConfig(c)
 	if err != nil {
 		return nil, err
 	}
@@ -20,13 +20,13 @@ func sendTwilioMessage(from string, to string, body string, c *appengine.Context
 	data.Set("From", from)
 	data.Set("Body", body)
 
-	u, _ := url.ParseRequestURI(config.TwilioURL)
-	u.Path = config.TwilioMessagePath
+	u, _ := url.ParseRequestURI(globalConfig.TwilioURL)
+	u.Path = globalConfig.TwilioMessagePath
 	urlStr := fmt.Sprintf("%v", u)
 
 	req, _ := http.NewRequest("POST", urlStr, bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth(config.TwilioSID, config.TwilioToken)
+	req.SetBasicAuth(globalConfig.TwilioSID, globalConfig.TwilioToken)
 
 	client := urlfetch.Client(*c)
 	resp, err := client.Do(req)

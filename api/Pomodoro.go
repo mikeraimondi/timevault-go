@@ -16,7 +16,7 @@ type Pomodoro struct {
 	FinishedAt time.Time     `datastore:"finishedAt"  json:"finishedAt"`
 }
 
-func (p *Pomodoro) Finish(c *appengine.Context, k *datastore.Key) error {
+func (p *Pomodoro) Finish(c *appengine.Context, k *datastore.Key) (err error) {
 	t, err := endPomodoro.Task(*k)
 	if err != nil {
 		return err
@@ -25,11 +25,11 @@ func (p *Pomodoro) Finish(c *appengine.Context, k *datastore.Key) error {
 	if _, err := taskqueue.Add(*c, t, ""); err != nil {
 		return err
 	}
-	return nil
+	return
 }
 
-var endPomodoro = delay.Func("endPomodoro", func(c appengine.Context, k datastore.Key) error {
-	config, err := getConfig(&c)
+var endPomodoro = delay.Func("endPomodoro", func(c appengine.Context, k datastore.Key) (err error) {
+	err = setConfig(&c)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ var endPomodoro = delay.Func("endPomodoro", func(c appengine.Context, k datastor
 	}
 	if pom.Finished {
 		c.Warningf("%v", "Pomodoro already completed")
-		return nil
+		return
 	}
 	pom.Finished = true
 	pom.FinishedAt = time.Now()
@@ -50,8 +50,8 @@ var endPomodoro = delay.Func("endPomodoro", func(c appengine.Context, k datastor
 	if err := datastore.Get(c, k.Parent(), &u); err != nil {
 		return err
 	}
-	if _, err := sendTwilioMessage(config.TwilioNumber, u.PhoneNumber, "Pomodoro complete!", &c); err != nil {
+	if _, err := sendTwilioMessage(globalConfig.TwilioNumber, u.PhoneNumber, "Pomodoro complete!", &c); err != nil {
 		return err
 	}
-	return nil
+	return
 })
