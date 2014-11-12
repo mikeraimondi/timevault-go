@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"crypto/rand"
 	"encoding/base64"
@@ -14,6 +15,7 @@ import (
 	"strings"
 
 	"appengine"
+	"appengine/datastore"
 	"appengine/urlfetch"
 
 	"code.google.com/p/google-api-go-client/plus/v1"
@@ -41,8 +43,11 @@ func oauthConfig(c *appengine.Context) (config *oauth2.Config, err error) {
 	config, err = oauth2.NewConfig(&oauth2.Options{
 		ClientID:     globalConfig.GplusClientID,
 		ClientSecret: globalConfig.GplusClientSecret,
-		Scopes:       []string{"https://www.googleapis.com/auth/plus.login"},
-		RedirectURL:  gplusRedirectURL,
+		Scopes: []string{
+			"https://www.googleapis.com/auth/plus.login",
+			"email",
+		},
+		RedirectURL: gplusRedirectURL,
 	},
 		"https://accounts.google.com/o/oauth2/auth",
 		"https://accounts.google.com/o/oauth2/token")
@@ -153,16 +158,49 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appE
 	}
 
 	// Check if the user is already connected
-	storedToken := session.Values["accessToken"]
-	storedGPlusID := session.Values["gplusID"]
-	if storedToken != nil && storedGPlusID == gplusID {
+	q := datastore.NewQuery("user").Filter("gplusID =", gplusID).Limit(1)
+	var users []TimevaultUser
+	// TODO err
+	q.GetAll(*c, &users)
+	if len(users) > 0 {
 		m := "Current user already connected"
 		return &appError{errors.New(m), m, 200}
 	}
 
-	// Store the access token in the session for later use
-	session.Values["accessToken"] = token.AccessToken
-	session.Values["gplusID"] = gplusID
+	// Store the user
+	t := oauthConfig.NewTransport()
+	t.SetToken(token)
+	client := &http.Client{Transport: t}
+	service, err := plus.New(client)
+	if err != nil {
+		return &appError{err, "Create Plus Client", 500}
+	}
+	meCall := service.People.Get("me")
+	// TODO err
+	me, _ := meCall.Do()
+	key := datastore.NewKey(*c, "user", me.Emails[0].Value, 0, nil)
+	err = datastore.RunInTransaction(*c, func(c appengine.Context) error {
+		// Note: this function's argument c shadows the variable c
+		//       from the surrounding function.
+		user := new(TimevaultUser)
+		err := datastore.Get(c, key, user)
+		if err != nil && err != datastore.ErrNoSuchEntity {
+			return err
+		}
+		user.Username = me.DisplayName
+		user.CreatedAt = time.Now()
+		user.GplusAccessToken = token.AccessToken
+		user.GplusID = gplusID
+		_, err = datastore.Put(c, key, user)
+		if err != nil {
+			return err
+		}
+		session.Values["currentUser"] = key.Encode()
+		return err
+	}, nil)
+	if err != nil {
+		return &appError{err, "Save user", 500}
+	}
 	session.Save(r, w)
 	return nil
 }
@@ -170,14 +208,17 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appE
 // disconnect revokes the current user's token and resets their session
 func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
 	// Only disconnect a connected user
-	token := session.Values["accessToken"]
-	if token == nil {
+	id := session.Values["currentUser"]
+	if id == nil {
 		m := "Current user not connected"
 		return &appError{errors.New(m), m, 401}
 	}
+	var user TimevaultUser
+	key, _ := datastore.DecodeKey(id.(string))
+	datastore.Get(*c, key, &user)
 
 	// Execute HTTP GET request to revoke current token
-	url := "https://accounts.google.com/o/oauth2/revoke?token=" + token.(string)
+	url := "https://accounts.google.com/o/oauth2/revoke?token=" + user.GplusAccessToken
 	client := urlfetch.Client(*c)
 	resp, err := client.Get(url)
 	if err != nil {
@@ -186,20 +227,29 @@ func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *a
 	}
 	defer resp.Body.Close()
 
+	// Remove access token and ID
+	user.GplusAccessToken = ""
+	user.GplusID = ""
+	// TODO err
+	datastore.Put(*c, key, &user)
+
 	// Reset the user's session
-	session.Values["accessToken"] = nil
+	session.Values["currentUser"] = nil
 	session.Save(r, w)
 	return nil
 }
 
 // people fetches the list of people user has shared with this app
 func people(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appError {
-	token := session.Values["accessToken"]
-	// Only fetch a list of people for connected users
-	if token == nil {
+	id := session.Values["currentUser"]
+	if id == nil {
 		m := "Current user not connected"
 		return &appError{errors.New(m), m, 401}
 	}
+	var user TimevaultUser
+	// TODO err
+	key, _ := datastore.DecodeKey(id.(string))
+	datastore.Get(*c, key, &user)
 
 	// Create a new authorized API client
 	oauthConfig, err := oauthConfig(c)
@@ -208,7 +258,7 @@ func people(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appEr
 	}
 	t := oauthConfig.NewTransport()
 	tok := new(oauth2.Token)
-	tok.AccessToken = token.(string)
+	tok.AccessToken = user.GplusAccessToken
 	t.SetToken(tok)
 	client := &http.Client{Transport: t}
 	service, err := plus.New(client)
