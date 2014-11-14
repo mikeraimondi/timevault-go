@@ -160,8 +160,10 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appE
 	// Check if the user is already connected
 	q := datastore.NewQuery("user").Filter("gplusID =", gplusID).Limit(1)
 	var users []TimevaultUser
-	// TODO err
-	q.GetAll(*c, &users)
+	_, err = q.GetAll(*c, &users)
+	if err != nil {
+		return &appError{err, "Error checking user connection state", 500}
+	}
 	if len(users) > 0 {
 		m := "Current user already connected"
 		return &appError{errors.New(m), m, 200}
@@ -176,8 +178,10 @@ func connect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appE
 		return &appError{err, "Create Plus Client", 500}
 	}
 	meCall := service.People.Get("me")
-	// TODO err
-	me, _ := meCall.Do()
+	me, err := meCall.Do()
+	if err != nil {
+		return &appError{err, "Fetching Plus user email", 500}
+	}
 	key := datastore.NewKey(*c, "user", me.Emails[0].Value, 0, nil)
 	err = datastore.RunInTransaction(*c, func(c appengine.Context) error {
 		// Note: this function's argument c shadows the variable c
@@ -214,24 +218,31 @@ func disconnect(w http.ResponseWriter, r *http.Request, c *appengine.Context) *a
 		return &appError{errors.New(m), m, 401}
 	}
 	var user TimevaultUser
-	key, _ := datastore.DecodeKey(id.(string))
-	datastore.Get(*c, key, &user)
+	key, err := datastore.DecodeKey(id.(string))
+	if err != nil {
+		return &appError{err, "Decoding key", 500}
+	}
+	err = datastore.Get(*c, key, &user)
+	if err != nil {
+		return &appError{err, "Retrieving user", 500}
+	}
 
 	// Execute HTTP GET request to revoke current token
 	url := "https://accounts.google.com/o/oauth2/revoke?token=" + user.GplusAccessToken
 	client := urlfetch.Client(*c)
-	resp, err := client.Get(url)
+	_, err = client.Get(url)
 	if err != nil {
 		m := "Failed to revoke token for a given user"
 		return &appError{errors.New(m), m, 400}
 	}
-	defer resp.Body.Close()
 
 	// Remove access token and ID
 	user.GplusAccessToken = ""
 	user.GplusID = ""
-	// TODO err
-	datastore.Put(*c, key, &user)
+	_, err = datastore.Put(*c, key, &user)
+	if err != nil {
+		return &appError{err, "Reset user Plus attributes", 500}
+	}
 
 	// Reset the user's session
 	session.Values["currentUser"] = nil
@@ -247,9 +258,14 @@ func people(w http.ResponseWriter, r *http.Request, c *appengine.Context) *appEr
 		return &appError{errors.New(m), m, 401}
 	}
 	var user TimevaultUser
-	// TODO err
-	key, _ := datastore.DecodeKey(id.(string))
-	datastore.Get(*c, key, &user)
+	key, err := datastore.DecodeKey(id.(string))
+	if err != nil {
+		return &appError{err, "Decoding key", 500}
+	}
+	err = datastore.Get(*c, key, &user)
+	if err != nil {
+		return &appError{err, "Retrieving user", 500}
+	}
 
 	// Create a new authorized API client
 	oauthConfig, err := oauthConfig(c)
@@ -302,14 +318,11 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// prevents memory leaks from Gorilla
-	defer context.Clear(r)
+	defer context.Clear(r) // prevents memory leaks from Gorilla
 	session, err = globalStore.Get(r, "timeVaultSession")
 	if err != nil {
-		// log.Println("error fetching session:", err)
-		// Ignore the initial session fetch error, as Get() always returns a
-		// session, even if empty.
-		//return &appError{err, "Error fetching session", 500}
+		c.Errorf("%v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	if e := fn(w, r, &c); e != nil { // e is *appError, not os.Error.
 		c.Errorf("%v", e.Err)
